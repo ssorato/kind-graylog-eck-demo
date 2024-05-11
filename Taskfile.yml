@@ -1,0 +1,63 @@
+version: '3'
+tasks:
+
+  default:
+    desc: "Main task"
+    deps: 
+      - task: graylog
+
+  create-kind-cluster:
+    desc: Create the kubernet cluster using Kind
+    cmds:
+      - kind get clusters -q | grep -w graylog-eck  || kind create cluster --config kind.yaml && echo "Cluster already created"
+
+  eck:
+    desc: Deploy ECK
+    deps:
+      - task: create-kind-cluster
+    cmds:
+      - kubectl apply -f eck/crds.yaml
+      - kubectl wait -f eck/crds.yaml --for condition=Established
+      - kubectl apply -f eck/operator.yaml
+      - kubectl wait -n elastic-system pod/elastic-operator-0 \--for condition=Ready
+      - kubectl apply -f eck/es-cluster.yaml
+      - |-
+        kubectl wait -n default elasticsearches/es-graylog --for=jsonpath='{.status.health}'=green --timeout=210s
+      - echo "elastic user's credential is `kubectl get secret es-graylog-es-elastic-user -o=jsonpath='{.data.elastic}' | base64 -d`"
+
+  mongodb:
+    desc: Deploy MongoDB
+    deps:
+      - task: eck
+    cmds:
+      - kubectl apply -f mongodb-kubernetes-operator/crds.yaml
+      - kubectl wait -f mongodb-kubernetes-operator/crds.yaml --for condition=Established
+      - kubectl apply -f mongodb-kubernetes-operator/clusterwide
+      - kubectl apply -k mongodb-kubernetes-operator/rbac --namespace default
+      - kubectl apply -f mongodb-kubernetes-operator/manager.yaml --namespace default
+      - kubectl wait -n default deployment/mongodb-kubernetes-operator --for condition=Available=True --timeout=210s
+      - kubectl apply -f mongodb-kubernetes-operator/mongodb-cluster.yaml --namespace default
+      - |-
+        kubectl wait -n default mongodbcommunity/mongodb-graylog --for=jsonpath='{.status.phase}'=Running --timeout=360s
+
+  graylog:
+    desc: Deploy Graylog
+    deps:
+      - task: mongodb
+    cmds:
+      - kubectl apply -f graylog
+      - kubectl wait -n default deployment/graylog --for condition=Available=True --timeout=60s
+
+  kibana:
+    desc: Deploy Kibana
+    deps:
+      - task: eck
+    cmds:
+      - kubectl apply -f eck/kibana.yaml
+
+  destroy:
+    desc: Destroy the kubernet cluster
+    prompt: This will delete the Kind cluster. Do you want to continue?
+    cmds:
+      - kind delete cluster --name graylog-eck
+      - kind get clusters

@@ -78,7 +78,7 @@ $ kubectl get serviceaccount mongodb-kubernetes-operator --namespace default
 ```
 
 ```bash
-$ kubectl create -f mongodb-kubernetes-operator/manager.yaml --namespace default
+$ kubectl apply -f mongodb-kubernetes-operator/manager.yaml --namespace default
 
 $ kubectl wait -n default deployment/mongodb-kubernetes-operator --for condition=Available=True
 ```
@@ -117,3 +117,14 @@ $ kubectl port-forward service/graylog-svc 9000
 ```bash
 $ kind delete cluster --name graylog-eck
 ```
+
+## Deploy using Task
+
+[Task](https://taskfile.dev/)
+
+>>> Task is a task runner / build tool that aims to be simpler and easier to use than, for example, GNU Make.
+
+```bash
+$ task graylog
+```
+
